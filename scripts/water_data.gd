@@ -11,7 +11,8 @@ var _terrain: RefCounted  # TerrainData
 var sources: Array = []
 var source_rate: float = 2.0
 var gravity: float = 9.8
-var friction: float = 0.995
+var friction: float = 0.999
+var waterfall_friction: float = 0.95
 var min_water: float = 0.001
 
 
@@ -67,22 +68,41 @@ func simulate(delta: float) -> void:
 			var idx: int = z * width + x
 			var total: float = float(_terrain.heightmap[idx]) + water[idx]
 
-			# Right pipe (+X): accelerate by height diff between this cell and right neighbor
+			# Right pipe (+X)
 			if x < width - 1:
 				var ridx: int = idx + 1
 				var r_total: float = float(_terrain.heightmap[ridx]) + water[ridx]
 				flow_right[idx] += (total - r_total) * gravity * delta
+			elif water[idx] > 0.0:
+				# Edge: accelerate outward as if neighbor is at terrain height with no water
+				flow_right[idx] += water[idx] * gravity * delta
 
-			# Down pipe (+Z): accelerate by height diff between this cell and down neighbor
+			# Down pipe (+Z)
 			if z < depth - 1:
 				var didx: int = idx + width
 				var d_total: float = float(_terrain.heightmap[didx]) + water[didx]
 				flow_down[idx] += (total - d_total) * gravity * delta
+			elif water[idx] > 0.0:
+				# Edge: accelerate outward
+				flow_down[idx] += water[idx] * gravity * delta
 
-	# Step 2: Apply friction
-	for i in flow_right.size():
-		flow_right[i] *= friction
-		flow_down[i] *= friction
+	# Step 2: Apply friction — higher on terrain height transitions (waterfalls)
+	for z in depth:
+		for x in width:
+			var idx: int = z * width + x
+			var t_h: int = _terrain.heightmap[idx]
+
+			# Right pipe
+			if x < width - 1:
+				var n_h: int = _terrain.heightmap[idx + 1]
+				var f: float = waterfall_friction if t_h != n_h else friction
+				flow_right[idx] *= f
+
+			# Down pipe
+			if z < depth - 1:
+				var n_h: int = _terrain.heightmap[idx + width]
+				var f: float = waterfall_friction if t_h != n_h else friction
+				flow_down[idx] *= f
 
 	# Step 3: Scale outgoing flows so cells don't go negative
 	for z in depth:
@@ -135,15 +155,24 @@ func simulate(delta: float) -> void:
 		for x in width:
 			var idx: int = z * width + x
 
+			# Left/top edge outflow (no stored pipe — direct drain, skip sources)
+			var _cell := Vector2i(x, z)
+			var _is_source: bool = _cell in sources
+			if x == 0 and water[idx] > 0.0 and not _is_source:
+				var drain: float = minf(water[idx] * gravity * delta, water[idx])
+				water[idx] -= drain
+			if z == 0 and water[idx] > 0.0 and not _is_source:
+				var drain: float = minf(water[idx] * gravity * delta, water[idx])
+				water[idx] -= drain
+
 			# Right pipe
 			if x < width - 1:
 				var f: float = flow_right[idx] * delta
 				water[idx] -= f
 				water[idx + 1] += f
 			elif flow_right[idx] > 0.0:
-				# Right boundary sink: water leaves the map
+				# Right boundary: water leaves the map
 				water[idx] -= flow_right[idx] * delta
-				flow_right[idx] = 0.0
 
 			# Down pipe
 			if z < depth - 1:
@@ -151,9 +180,8 @@ func simulate(delta: float) -> void:
 				water[idx] -= f
 				water[idx + width] += f
 			elif flow_down[idx] > 0.0:
-				# Bottom boundary sink: water leaves the map
+				# Bottom boundary: water leaves the map
 				water[idx] -= flow_down[idx] * delta
-				flow_down[idx] = 0.0
 
 	# Step 5: Clamp negatives and tiny values
 	for i in water.size():
