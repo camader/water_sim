@@ -24,14 +24,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		var mb := event as InputEventMouseButton
 		match mb.button_index:
 			MOUSE_BUTTON_MIDDLE:
-				if mb.shift_pressed:
-					_is_panning = mb.pressed
-					_is_rotating = false
-				else:
-					_is_rotating = mb.pressed
-					_is_panning = false
-			MOUSE_BUTTON_RIGHT:
 				_is_rotating = mb.pressed
+				_is_panning = false
+			MOUSE_BUTTON_RIGHT:
+				_is_panning = mb.pressed
+				_is_rotating = false
 			MOUSE_BUTTON_WHEEL_UP:
 				if mb.pressed:
 					distance = maxf(min_distance, distance - zoom_speed)
@@ -51,7 +48,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			var right := global_transform.basis.x
 			var forward := Vector3(right.z, 0, -right.x).normalized()
 			target += right * (-motion.relative.x * pan_speed)
-			target += forward * (-motion.relative.y * pan_speed)
+			target += forward * (motion.relative.y * pan_speed)
 			_update_transform()
 
 

@@ -16,7 +16,26 @@ func _ready() -> void:
 	])
 
 
-func render(terrain: RefCounted) -> void:
+var _source_color := Color(0.2, 0.3, 0.9)
+var _channel_color := Color(0.8, 0.2, 0.2)
+var _edge_color := Color(1.0, 0.6, 0.2)    # Orange - channel edge with terrain
+var _waterfall_color := Color(1.0, 0.5, 0.7) # Pink - height transition in channel
+
+
+func render(terrain: RefCounted, sources: Array = [], channels: Array = []) -> void:
+	var source_set := {}
+	for src in sources:
+		source_set[src] = true
+	var channel_set := {}
+	for ch in channels:
+		channel_set[ch] = true
+	var edge_set := {}
+	for e in terrain.channel_edge_cells:
+		edge_set[e] = true
+	var waterfall_set := {}
+	for w in terrain.channel_waterfall_cells:
+		waterfall_set[w] = true
+
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
@@ -45,7 +64,19 @@ func render(terrain: RefCounted) -> void:
 			)
 			mm.set_instance_transform(idx, xform)
 
-			var t: float = (h - 1.0) / float(terrain.max_height - 1) if terrain.max_height > 1 else 0.0
-			mm.set_instance_color(idx, _color_gradient.sample(t))
+			var color: Color
+			var cell := Vector2i(x, z)
+			if source_set.has(cell):
+				color = _source_color
+			elif waterfall_set.has(cell):
+				color = _waterfall_color
+			elif edge_set.has(cell):
+				color = _edge_color
+			elif channel_set.has(cell):
+				color = _channel_color
+			else:
+				var t: float = (h - 1.0) / float(terrain.max_height - 1) if terrain.max_height > 1 else 0.0
+				color = _color_gradient.sample(t)
+			mm.set_instance_color(idx, color)
 
 	multimesh = mm
